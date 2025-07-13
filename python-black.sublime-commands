@@ -6,5 +6,19 @@
     {
         "caption": "python-black: Create Black Configuration File",
         "command": "black_create_configuration",
-    }
+    },
+    {
+        "caption": "Preferences: python-black Settings",
+        "command": "edit_settings",
+        "args": {
+            "base_file": "${packages}/python-black/python-black.sublime-settings"
+        },
+    },
+    {
+        "caption": "Preferences: python-black Key Bindings",
+        "command": "edit_settings",
+        "args": {
+            "base_file": "${packages}/python-black/Default.sublime-keymap"
+        },
+    },
 ]
