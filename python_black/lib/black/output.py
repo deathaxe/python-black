@@ -3,34 +3,81 @@
 The double calls are for patching purposes in tests.
 """
 
-import sublime
+import json
+import re
 import tempfile
+from typing import Any, List, Optional
 
+from ..click import echo, style
 from ..mypy_extensions import mypyc_attr
 
 
-def out(msg: str):
-    sublime.status_message(f"black: {msg}")
+@mypyc_attr(patchable=True)
+def _out(message: Optional[str] = None, nl: bool = True, **styles: Any) -> None:
+    if message is not None:
+        if "bold" not in styles:
+            styles["bold"] = True
+        message = style(message, **styles)
+    echo(message, nl=nl, err=True)
 
 
-def err(msg: str):
-    sublime.status_message(f"black error: {msg}")
+@mypyc_attr(patchable=True)
+def _err(message: Optional[str] = None, nl: bool = True, **styles: Any) -> None:
+    if message is not None:
+        if "fg" not in styles:
+            styles["fg"] = "red"
+        message = style(message, **styles)
+    echo(message, nl=nl, err=True)
 
 
-def show_error_panel(text: str):
-    view = sublime.active_window().get_output_panel("black")
-    view.set_read_only(False)
-    view.run_command("black_output", {"text": text})
-    view.set_read_only(True)
-    sublime.active_window().run_command("show_panel", {"panel": "output.black"})
+@mypyc_attr(patchable=True)
+def out(message: Optional[str] = None, nl: bool = True, **styles: Any) -> None:
+    _out(message, nl=nl, **styles)
+
+
+def err(message: Optional[str] = None, nl: bool = True, **styles: Any) -> None:
+    _err(message, nl=nl, **styles)
+
+
+def ipynb_diff(a: str, b: str, a_name: str, b_name: str) -> str:
+    """Return a unified diff string between each cell in notebooks `a` and `b`."""
+    a_nb = json.loads(a)
+    b_nb = json.loads(b)
+    diff_lines = [
+        diff(
+            "".join(a_nb["cells"][cell_number]["source"]) + "\n",
+            "".join(b_nb["cells"][cell_number]["source"]) + "\n",
+            f"{a_name}:cell_{cell_number}",
+            f"{b_name}:cell_{cell_number}",
+        )
+        for cell_number, cell in enumerate(a_nb["cells"])
+        if cell["cell_type"] == "code"
+    ]
+    return "".join(diff_lines)
+
+
+_line_pattern = re.compile(r"(.*?(?:\r\n|\n|\r|$))")
+
+
+def _splitlines_no_ff(source: str) -> List[str]:
+    """Split a string into lines ignoring form feed and other chars.
+
+    This mimics how the Python parser splits source code.
+
+    A simplified version of the function with the same name in Lib/ast.py
+    """
+    result = [match[0] for match in _line_pattern.finditer(source)]
+    if result[-1] == "":
+        result.pop(-1)
+    return result
 
 
 def diff(a: str, b: str, a_name: str, b_name: str) -> str:
     """Return a unified diff string between strings `a` and `b`."""
     import difflib
 
-    a_lines = a.splitlines(keepends=True)
-    b_lines = b.splitlines(keepends=True)
+    a_lines = _splitlines_no_ff(a)
+    b_lines = _splitlines_no_ff(b)
     diff_lines = []
     for line in difflib.unified_diff(
         a_lines, b_lines, fromfile=a_name, tofile=b_name, n=5

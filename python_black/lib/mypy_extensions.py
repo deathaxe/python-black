@@ -1,12 +1,11 @@
 """Defines experimental extensions to the standard "typing" module that are
 supported by the mypy typechecker.
+
 Example usage:
     from mypy_extensions import TypedDict
 """
 
-from typing import Any
-
-# NOTE: This module must support Python 2.7 in addition to Python 3.x
+from typing import Any, Dict
 
 import sys
 # _type_check is NOT a part of public typing API, it is used here only to mimic
@@ -43,17 +42,32 @@ def _typeddict_new(cls, _typename, _fields=None, **kwargs):
     except (AttributeError, ValueError):
         pass
 
-    return _TypedDictMeta(_typename, (), ns)
+    return _TypedDictMeta(_typename, (), ns, _from_functional_call=True)
 
 
 class _TypedDictMeta(type):
-    def __new__(cls, name, bases, ns, total=True):
+    def __new__(cls, name, bases, ns, total=True, _from_functional_call=False):
         # Create new typed dict class object.
         # This method is called directly when TypedDict is subclassed,
         # or via _typeddict_new when TypedDict is instantiated. This way
         # TypedDict supports all three syntaxes described in its docstring.
         # Subclasses and instances of TypedDict return actual dictionaries
         # via _dict_new.
+
+        # We need the `if TypedDict in globals()` check,
+        # or we emit a DeprecationWarning when creating mypy_extensions.TypedDict itself
+        if 'TypedDict' in globals():
+            import warnings
+            warnings.warn(
+                (
+                    "mypy_extensions.TypedDict is deprecated, "
+                    "and will be removed in a future version. "
+                    "Use typing.TypedDict or typing_extensions.TypedDict instead."
+                ),
+                DeprecationWarning,
+                stacklevel=(3 if _from_functional_call else 2)
+            )
+
         ns['__new__'] = _typeddict_new if name == 'TypedDict' else _dict_new
         tp_dict = super(_TypedDictMeta, cls).__new__(cls, name, (dict,), ns)
 
@@ -74,24 +88,30 @@ TypedDict = _TypedDictMeta('TypedDict', (dict,), {})
 TypedDict.__module__ = __name__
 TypedDict.__doc__ = \
     """A simple typed name space. At runtime it is equivalent to a plain dict.
+
     TypedDict creates a dictionary type that expects all of its
     instances to have a certain set of keys, with each key
     associated with a value of a consistent type. This expectation
     is not checked at runtime but is only enforced by typecheckers.
     Usage::
+
         Point2D = TypedDict('Point2D', {'x': int, 'y': int, 'label': str})
         a: Point2D = {'x': 1, 'y': 2, 'label': 'good'}  # OK
         b: Point2D = {'z': 3, 'label': 'bad'}           # Fails type check
         assert Point2D(x=1, y=2, label='first') == dict(x=1, y=2, label='first')
+
     The type info could be accessed via Point2D.__annotations__. TypedDict
     supports two additional equivalent forms::
+
         Point2D = TypedDict('Point2D', x=int, y=int, label=str)
+
         class Point2D(TypedDict):
             x: int
             y: int
             label: str
+
     The latter syntax is only supported in Python 3.6+, while two other
-    syntax forms work for Python 2.7 and 3.2+
+    syntax forms work for 3.2+
     """
 
 # Argument constructors for making more-detailed Callables. These all just
@@ -130,7 +150,8 @@ def KwArg(type=Any):
 
 
 # Return type that indicates a function does not return
-class NoReturn: pass
+# Deprecated, use typing or typing_extensions variants instead
+class _DEPRECATED_NoReturn: pass
 
 
 def trait(cls):
@@ -157,3 +178,74 @@ class _FlexibleAliasCls:
 
 
 FlexibleAlias = _FlexibleAliasCls()
+
+
+class _NativeIntMeta(type):
+    def __instancecheck__(cls, inst):
+        return isinstance(inst, int)
+
+
+_sentinel = object()
+
+
+class i64(metaclass=_NativeIntMeta):
+    def __new__(cls, x=0, base=_sentinel):
+        if base is not _sentinel:
+            return int(x, base)
+        return int(x)
+
+
+class i32(metaclass=_NativeIntMeta):
+    def __new__(cls, x=0, base=_sentinel):
+        if base is not _sentinel:
+            return int(x, base)
+        return int(x)
+
+
+class i16(metaclass=_NativeIntMeta):
+    def __new__(cls, x=0, base=_sentinel):
+        if base is not _sentinel:
+            return int(x, base)
+        return int(x)
+
+
+class u8(metaclass=_NativeIntMeta):
+    def __new__(cls, x=0, base=_sentinel):
+        if base is not _sentinel:
+            return int(x, base)
+        return int(x)
+
+
+for _int_type in i64, i32, i16, u8:
+    _int_type.__doc__ = \
+        """A native fixed-width integer type when used with mypyc.
+
+        In code not compiled with mypyc, behaves like the 'int' type in these
+        runtime contexts:
+
+        * {name}(x[, base=n]) converts a number or string to 'int'
+        * isinstance(x, {name}) is the same as isinstance(x, int)
+        """.format(name=_int_type.__name__)
+del _int_type
+
+
+def _warn_deprecation(name: str, module_globals: Dict[str, Any]) -> Any:
+    if (val := module_globals.get(f"_DEPRECATED_{name}")) is None:
+        msg = f"module '{__name__}' has no attribute '{name}'"
+        raise AttributeError(msg)
+    module_globals[name] = val
+    if name in {"NoReturn"}:
+        msg = (
+            f"'mypy_extensions.{name}' is deprecated, "
+            "and will be removed in a future version. "
+            f"Use 'typing.{name}' or 'typing_extensions.{name}' instead"
+        )
+    else:
+        assert False, f"Add deprecation message for 'mypy_extensions.{name}'"
+    import warnings
+    warnings.warn(msg, DeprecationWarning, stacklevel=3)
+    return val
+
+
+def __getattr__(name: str) -> Any:
+    return _warn_deprecation(name, module_globals=globals())

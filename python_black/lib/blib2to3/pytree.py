@@ -15,16 +15,17 @@ There's also a pattern matching implementation here.
 from typing import (
     Any,
     Dict,
+    Iterable,
     Iterator,
     List,
     Optional,
+    Set,
     Tuple,
     TypeVar,
     Union,
-    Set,
-    Iterable,
 )
-from .pgen2.grammar import Grammar
+
+from ..blib2to3.pgen2.grammar import Grammar
 
 __author__ = "Guido van Rossum <guido@python.org>"
 
@@ -39,12 +40,15 @@ _type_reprs: Dict[int, Union[str, int]] = {}
 def type_repr(type_num: int) -> Union[str, int]:
     global _type_reprs
     if not _type_reprs:
-        from .pygram import python_symbols
+        from . import pygram
+
+        if not hasattr(pygram, "python_symbols"):
+            pygram.initialize(cache_dir=None)
 
         # printing tokens is possible but not as useful
         # from .pgen2 import token // token.__dict__.items():
-        for name in dir(python_symbols):
-            val = getattr(python_symbols, name)
+        for name in dir(pygram.python_symbols):
+            val = getattr(pygram.python_symbols, name)
             if type(val) == int:
                 _type_reprs[val] = name
     return _type_reprs.setdefault(type_num, type_num)
@@ -58,7 +62,6 @@ RawNode = Tuple[int, Optional[str], Optional[Context], Optional[List[NL]]]
 
 
 class Base:
-
     """
     Abstract base class for Node and Leaf.
 
@@ -237,7 +240,6 @@ class Base:
 
 
 class Node(Base):
-
     """Concrete implementation for interior nodes."""
 
     fixers_applied: Optional[List[Any]]
@@ -378,7 +380,6 @@ class Node(Base):
 
 
 class Leaf(Base):
-
     """Concrete implementation for leaf nodes."""
 
     # Default values for instance variables
@@ -506,7 +507,6 @@ _Results = Dict[str, NL]
 
 
 class BasePattern:
-
     """
     A pattern is a tree matching pattern.
 
@@ -714,7 +714,6 @@ class NodePattern(BasePattern):
 
 
 class WildcardPattern(BasePattern):
-
     """
     A wildcard pattern can match zero or more nodes.
 
