@@ -1,4 +1,8 @@
 {
+   // Log Level
+   // valid values: "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG",
+   // Changes take effect after restarting ST.
+   "logging": "ERROR",
    // Whether to automatically format the entire document when saving.
    // There are three modes:
    //    - true (deprecated)

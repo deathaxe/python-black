@@ -115,17 +115,22 @@ class Formatter(logging.Formatter):
 def log_level() -> int:
     """Get the log level.
 
-    Returns `DEBUG` in debug mode, `INFO` otherwise.
-
     Returns:
         int: log level
     """
-    current_path = os.path.abspath(os.path.dirname(__file__))
-    return (
-        logging.INFO
-        if current_path.startswith(sublime.installed_packages_path())
-        else logging.DEBUG
-    )
+    settings = sublime.load_settings("python-black.sublime-settings")
+    level = settings.get("logging", "ERROR")
+    if not level:
+        return logging.ERROR
+
+    return {
+        "CRITICAL": logging.CRITICAL,
+        "ERROR": logging.ERROR,
+        "WARNING": logging.WARNING,
+        "INFO": logging.INFO,
+        "DEBUG": logging.DEBUG,
+        "NOTSET": logging.NOTSET,
+    }.get(level.upper(), logging.ERROR)
 
 
 def stream_handler():
